@@ -1,0 +1,241 @@
+*&---------------------------------------------------------------------*
+*& Report  ZZALV
+*&
+*&---------------------------------------------------------------------*
+
+report  zzalv.
+
+data: ok_code type syucomm.
+*----------------------------------------------------------------------*
+*       CLASS main DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class main definition.
+  public section.
+    data: i_sbook type standard table of sbook initial size 0,
+          i_sbook_old type standard table of sbook initial size 0.
+
+    methods:constructor,
+            handle_toolbar for event toolbar of cl_gui_alv_grid
+            importing e_object e_interactive,
+            handle_user_command for event
+            user_command of cl_gui_alv_grid
+            importing e_ucomm,
+            check_changed_data.
+  protected section.
+
+
+  private section.
+    type-pools: icon.
+    data:container type ref to cl_gui_custom_container,
+          oref_alv type ref to cl_gui_alv_grid,
+          wa_layout type lvc_s_layo,
+          i_fieldcatalog type lvc_t_fcat.
+    methods:get_field_catalog,get_layout.
+endclass.                    "main DEFINITION
+*----------------------------------------------------------------------*
+*       CLASS main IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class main implementation.
+  method constructor.
+
+    select * from sbook into table i_sbook
+      up to 50 rows.
+    i_sbook_old[] = i_sbook[].
+
+    create object container
+      exporting
+*       parent                      =
+        container_name              = 'CONT1'
+*       style                       =
+*       lifetime                    = lifetime_default
+        repid                       = sy-repid
+        dynnr                       = '0100'
+*       no_autodef_progid_dynnr     =
+      exceptions
+        cntl_error                  = 1
+        cntl_system_error           = 2
+        create_error                = 3
+        lifetime_error              = 4
+        lifetime_dynpro_dynpro_link = 5
+        others                      = 6
+        .
+    if sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*            WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+    endif.
+
+
+    create object oref_alv
+      exporting
+*        i_shellstyle      = 0
+*        i_lifetime        =
+         i_parent          = container
+*        i_appl_events     = space
+*        i_parentdbg       =
+*        i_applogparent    =
+*        i_graphicsparent  =
+*        i_name            =
+*        i_fcat_complete   = space
+      exceptions
+        error_cntl_create = 1
+        error_cntl_init   = 2
+        error_cntl_link   = 3
+        error_dp_create   = 4
+        others            = 5
+        .
+    if sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*            WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+    endif.
+
+    call method me->get_field_catalog.
+    call method me->get_layout.
+
+    call method oref_alv->set_table_for_first_display
+      exporting
+*       i_buffer_active               =
+*       i_bypassing_buffer            =
+*       i_consistency_check           =
+*       i_structure_name              =
+*       is_variant                    =
+*       i_save                        =
+*       i_default                     = 'X'
+        is_layout                     = wa_layout
+*       is_print                      =
+*       it_special_groups             =
+*       it_toolbar_excluding          =
+*       it_hyperlink                  =
+*       it_alv_graphics               =
+*       it_except_qinfo               =
+*       ir_salv_adapter               =
+      changing
+        it_outtab                     = i_sbook
+        it_fieldcatalog               = i_fieldcatalog
+*       it_sort                       =
+*       it_filter                     =
+      exceptions
+        invalid_parameter_combination = 1
+        program_error                 = 2
+        too_many_lines                = 3
+        others                        = 4
+            .
+    if sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*            WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+    endif.
+    set handler me->handle_toolbar for oref_alv.
+    set handler me->handle_user_command for oref_alv.
+
+    call method oref_alv->set_toolbar_interactive.
+
+  endmethod.                    "constructor
+  method get_layout.
+    wa_layout-cwidth_opt = 'X'.
+  endmethod.                    "get_layout
+  method get_field_catalog.
+    field-symbols: <lf1> type lvc_s_fcat.
+
+    call function 'LVC_FIELDCATALOG_MERGE'
+      exporting
+*       I_BUFFER_ACTIVE              =
+        i_structure_name             = 'SBOOK'
+        i_client_never_display       = 'X'
+*       I_BYPASSING_BUFFER           =
+        i_internal_tabname           = 'I_SBOOK'
+      changing
+        ct_fieldcat                  = i_fieldcatalog
+      exceptions
+        inconsistent_interface       = 1
+        program_error                = 2
+        others                       = 3
+              .
+    if sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+    endif.
+
+    loop at i_fieldcatalog assigning <lf1>.
+      if <lf1>-fieldname = 'SMOKER'.
+        <lf1>-edit = 'X'.  " REUSE_ALV_GRID_DISPLAY
+      endif.
+    endloop.
+  endmethod.                    "get_field_catalog
+  method handle_toolbar.
+    data: l_toolbar  type stb_button.
+    clear l_toolbar.
+* append an icon to show booking table
+    clear l_toolbar.
+    move 'SAVE' to l_toolbar-function.
+    move icon_system_save to l_toolbar-icon.
+    move 'Save' to l_toolbar-quickinfo.
+    move 'Save' to l_toolbar-text.
+    move ' ' to l_toolbar-disabled.
+    append l_toolbar to e_object->mt_toolbar.
+
+  endmethod.                    "handle_toolbar
+  method handle_user_command.
+    case e_ucomm.
+      when 'SAVE'.
+        if i_sbook[] <> i_sbook_old[].
+          message i001(00) with 'You have changed some data'.
+        else.
+          message i001(00) with 'No data changed'.
+        endif.
+    endcase.
+  endmethod.                    "user_command
+  method check_changed_data.
+
+    call method oref_alv->check_changed_data
+*      IMPORTING
+*        e_valid   =
+*      CHANGING
+*        c_refresh = 'X'
+        .
+
+
+  endmethod.                    "CHECK_CHANGED_DATA
+endclass.                    "main IMPLEMENTATION
+
+start-of-selection.
+
+  data: oref_main type ref to main.
+  create object oref_main.
+
+  call screen 0100.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+module status_0100 output.
+  set pf-status 'S0100'.
+*  SET TITLEBAR 'xxx'.
+
+endmodule.                 " STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+module user_command_0100 input.
+ok_code = sy-ucomm.
+  case ok_code.
+    when 'BACK'.
+
+      set screen 0.
+      leave screen.
+    when 'SAVE'.
+      " Check this part if the button is SAP standard toolbar
+      call method oref_main->check_changed_data.
+      if oref_main->i_sbook[] ne oref_main->i_sbook_old[].
+        message i001(00) with 'You have changed some data'.
+      else.
+        message i001(00) with 'No data changed'.
+      endif.
+
+  endcase.
+endmodule.                 " USER_COMMAND_0100  INPUT
